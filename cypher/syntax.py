@@ -41,7 +41,11 @@ class Identifier(Token):
     valid_ident = re.compile(r'^[_a-z][_a-z0-0]*$', re.I)
 
     def __init__(self, value, identifier=None, alias=None):
-        if hasattr(value, 'identifier'):
+        if isinstance(value, Identifier):
+            alias = value.alias
+            identifier = value.identifier
+            value = value.value
+        elif hasattr(value, 'identifier'):
             value = value.identifier
 
         self.value = value
@@ -246,11 +250,13 @@ class Rel(Token):
                 space = True
 
                 if isinstance(self.type, (list, tuple)):
-                    toks.append(':' + '|'.join(self.type))
+                    toks.append(':')
+                    types = [Identifier(t) for t in self.type]
+                    toks.extend(utils.delimit(types, delimiter='|'))
                 elif self.type.startswith('*'):
                     toks.append(self.type)
                 else:
-                    toks.append(':' + self.type)
+                    toks.extend([':', Identifier(self.type)])
 
             if self.props:
                 if space:
@@ -431,6 +437,40 @@ class Create(Statement, ValueList):
 class CreateUnique(Create):
     def __init__(self, values):
         super(CreateUnique, self).__init__(values, unique=True)
+
+
+class CreateIndex(Statement):
+    keyword = 'CREATE INDEX'
+
+    def __init__(self, label, prop):
+        self.label = label
+        self.prop = prop
+
+    def tokenize(self):
+        return [self.keyword, ' ', ':', Identifier(self.label),
+                '(', Identifier(self.prop), ')']
+
+
+class DropIndex(CreateIndex):
+    keyword = 'DROP INDEX'
+
+
+class CreateConstraint(Statement):
+    keyword = 'CREATE CONSTRAINT'
+
+    def __init__(self, label, prop):
+        self.label = label
+        self.prop = prop
+
+    def tokenize(self):
+        n = Node(labels=[self.label], identifier='n')
+
+        return [self.keyword, ' ', 'ON', ' ', n, ' ', 'ASSERT', ' ',
+                Predicate(Identifier(self.prop, identifier='n'), 'IS UNIQUE')]
+
+
+class DropConstraint(CreateConstraint):
+    keyword = 'DROP CONSTRAINT'
 
 
 class Delete(Statement, ValueList):
